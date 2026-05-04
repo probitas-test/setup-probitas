@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        probitas-version: [latest, 0.7.3]
+        probitas-version: [latest, 0.21.0]
     steps:
       - uses: actions/checkout@v4
 
