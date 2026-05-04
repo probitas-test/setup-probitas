@@ -9,7 +9,7 @@ Set up your GitHub Actions workflow with [Probitas](https://github.com/probitas-
 The simplest setup installs the latest stable Probitas version:
 
 ```yaml
-- uses: probitas-test/setup-probitas@v1
+- uses: probitas-test/setup-probitas@v2
 ```
 
 ### Full Example Workflow
@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: probitas-test/setup-probitas@v1
+      - uses: probitas-test/setup-probitas@v2
 
       - name: Run Probitas tests
         run: probitas run
@@ -39,12 +39,17 @@ jobs:
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `probitas-version` | The Probitas version to install from GitHub releases. Can be a semver version or `latest`. | `latest` |
+| `deno-version` | The Deno version to install. Can be a semver version or range (e.g., `v2.x`, `^2`), `canary`, `lts`, or `rc`. | `v2.x` |
+| `probitas-version` | The Probitas version to install from JSR. Can be a semver version or `latest`. | `latest` |
+| `cache` | Cache downloaded modules & packages automatically in GitHub Actions cache. | `true` |
+| `cache-hash` | A hash used as part of the cache key, which defaults to a hash of the `deno.lock` files. | |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
+| `cache-hit` | A boolean indicating whether the cache was hit. |
+| `deno-version` | The Deno version that was installed. |
 | `probitas-version` | The Probitas version that was installed. |
 
 ## Examples
@@ -52,9 +57,9 @@ jobs:
 ### Specify Version
 
 ```yaml
-- uses: probitas-test/setup-probitas@v1
+- uses: probitas-test/setup-probitas@v2
   with:
-    probitas-version: "0.7.1"
+    probitas-version: "0.21.0"
 ```
 
 ### Matrix Testing
@@ -67,11 +72,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        probitas-version: ["latest", "0.7.0", "0.7.1"]
+        probitas-version: ["latest", "0.20.0", "0.21.0"]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: probitas-test/setup-probitas@v1
+      - uses: probitas-test/setup-probitas@v2
         with:
           probitas-version: ${{ matrix.probitas-version }}
 
@@ -81,7 +86,7 @@ jobs:
 ### Run with Selectors and Tags
 
 ```yaml
-- uses: probitas-test/setup-probitas@v1
+- uses: probitas-test/setup-probitas@v2
 
 - name: Run integration tests
   run: probitas run -s tag:integration
@@ -101,7 +106,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: probitas-test/setup-probitas@v1
+      - uses: probitas-test/setup-probitas@v2
       - run: probitas run
 ```
 
@@ -109,30 +114,31 @@ jobs:
 
 This action performs the following steps:
 
-1. **Install Probitas CLI**: Downloads and installs the pre-compiled Probitas CLI binary from GitHub releases
-2. **Verify Installation**: Confirms Probitas is correctly installed and available in the PATH
+1. **Setup Deno**: Installs Deno (required runtime) via [denoland/setup-deno](https://github.com/denoland/setup-deno), with optional caching of `deno.lock` dependencies
+2. **Install Probitas CLI**: Runs the official `install.sh` from the Probitas repository, which uses `deno install` to install the CLI from [JSR](https://jsr.io/@probitas/probitas) at the requested version
+3. **Verify Installation**: Confirms Probitas is correctly installed and available in the PATH
 
 ## Versioning
 
-This action follows semantic versioning. When a new version is released (e.g., `v1.0.0`), the following tags are automatically updated:
+This action follows semantic versioning. When a new version is released (e.g., `v2.0.0`), the following tags are automatically updated:
 
-- `v1` - Points to the latest `v1.x.x` release
-- `v1.0` - Points to the latest `v1.0.x` release
+- `v2` - Points to the latest `v2.x.x` release
+- `v2.0` - Points to the latest `v2.0.x` release
 
 ### Recommended Usage
 
 ```yaml
 # Recommended: Use major version for automatic updates
-- uses: probitas-test/setup-probitas@v1
+- uses: probitas-test/setup-probitas@v2
 
 # Alternative: Pin to major.minor for more control
-- uses: probitas-test/setup-probitas@v1.0
+- uses: probitas-test/setup-probitas@v2.0
 
 # Alternative: Pin to exact version for maximum stability
-- uses: probitas-test/setup-probitas@v1.0.0
+- uses: probitas-test/setup-probitas@v2.0.0
 ```
 
-Using `@v1` ensures you automatically receive bug fixes and new features within the v1 major version, while avoiding breaking changes.
+Using `@v2` ensures you automatically receive bug fixes and new features within the v2 major version, while avoiding breaking changes.
 
 ## Related Projects
 
