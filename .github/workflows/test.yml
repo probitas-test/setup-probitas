@@ -13,8 +13,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        probitas-version: [latest, 0.21.0]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
+        probitas-version: [latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +27,6 @@ jobs:
       - name: Verify Outputs
         shell: bash
         run: |
-          echo "Deno Version: ${{ steps.setup.outputs.deno-version }}"
           echo "Probitas Version: ${{ steps.setup.outputs.probitas-version }}"
 
       - name: Test Probitas CLI
@@ -40,7 +39,7 @@ jobs:
         run: |
           mkdir -p probitas
           cat > probitas/test.probitas.ts << 'EOF'
-          import { scenario } from "jsr:@probitas/probitas";
+          import { scenario } from "@probitas-test/probitas";
 
           export default scenario("Test Scenario")
             .step("Hello", () => {
@@ -52,3 +51,22 @@ jobs:
 
       - name: Run Probitas
         run: probitas run
+
+  # Probitas 1.x is served by setup-probitas@v1; v2 must refuse it clearly.
+  rejects-1x:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Probitas 1.x
+        id: setup
+        continue-on-error: true
+        uses: ./
+        with:
+          probitas-version: "1.0.0"
+
+      - name: Expect failure
+        if: steps.setup.outcome != 'failure'
+        run: |
+          echo "setup-probitas@v2 accepted Probitas 1.0.0"
+          exit 1

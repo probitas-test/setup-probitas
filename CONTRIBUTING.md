@@ -31,10 +31,9 @@ jobs:
 ### Running CI
 
 The test workflow runs automatically on pull requests and tests:
-- Basic setup on Ubuntu, macOS, and Windows
-- Version selection (Deno 2.x and LTS)
-- Caching functionality
-- Installation without cache
+- Installing the latest Probitas on Ubuntu (x64 and arm64), macOS and Windows
+- Running a scenario with the installed binary
+- Refusing Probitas 1.x with a pointer to `@v1`
 
 ## Release Process
 
