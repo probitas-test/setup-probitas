@@ -1,68 +1,101 @@
 name: "Setup Probitas"
-description: "Setup Probitas by installing Deno and Probitas CLI, and adding them to the path."
+description: "Install the Probitas CLI binary and add it to the path."
 author: "JSR Probitas"
 branding:
   icon: "check-circle"
   color: "green"
 
 inputs:
-  deno-version:
-    description: "The Deno version to install. Can be a semver version or range (e.g., 'v2.x', '^2'), 'canary', 'lts', or 'rc'. Defaults to latest v2.x."
-    default: "v2.x"
   probitas-version:
-    description: "The Probitas version to install. Can be a semver version or 'latest'."
+    description: "The Probitas version to install (2.0.0 or later), or 'latest'."
     default: "latest"
   cache:
-    description: "Cache downloaded modules & packages automatically in GitHub Actions cache."
+    description: "Cache the DuckDB native binding Probitas downloads on first use."
     default: "true"
-  cache-hash:
-    description: "A hash used as part of the cache key, which defaults to a hash of the deno.lock files."
 
 outputs:
-  cache-hit:
-    description: "A boolean indicating whether the cache was hit."
-    value: ${{ steps.setup-deno.outputs.cache-hit }}
-  deno-version:
-    description: "The Deno version that was installed."
-    value: ${{ steps.setup-deno.outputs.deno-version }}
   probitas-version:
     description: "The Probitas version that was installed."
-    value: ${{ steps.install-probitas.outputs.probitas-version }}
+    value: ${{ steps.version.outputs.version }}
 
 runs:
   using: "composite"
   steps:
-    - name: Setup Deno
-      id: setup-deno
-      uses: denoland/setup-deno@v2
-      with:
-        deno-version: ${{ inputs.deno-version }}
-        cache: ${{ inputs.cache }}
-        cache-hash: ${{ inputs.cache-hash }}
-
-    - name: Install Probitas CLI
-      id: install-probitas
+    - name: Resolve Probitas version
+      id: version
       shell: bash
       env:
-        PROBITAS_VERSION: ${{ inputs.probitas-version != 'latest' && inputs.probitas-version || '' }}
+        REQUESTED: ${{ inputs.probitas-version }}
       run: |
-        echo "Installing Probitas CLI${PROBITAS_VERSION:+ version $PROBITAS_VERSION}..."
-        curl -fsSL https://raw.githubusercontent.com/probitas-test/probitas/main/install.sh | sh
-
-        # Verify installation
-        if ! command -v probitas &> /dev/null; then
-          echo "Error: Probitas CLI installation failed"
-          exit 1
+        version="${REQUESTED#v}"
+        if [ "$version" = "latest" ]; then
+          # The /latest page redirects to /tag/v<version>; reading the redirect
+          # avoids the GitHub API rate limit.
+          url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/probitas-test/probitas/releases/latest)
+          version="${url##*/tag/v}"
         fi
+        case "$version" in
+          0.* | 1.*)
+            echo "::error::setup-probitas@v2 installs Probitas 2 or later (got $version). Use probitas-test/setup-probitas@v1 for Probitas 1.x."
+            exit 1
+            ;;
+        esac
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "Probitas version: $version"
 
-        # Get installed version (use temp file to avoid SIGPIPE with pipefail)
-        INSTALLED_VERSION=$(probitas --version 2>&1 || true)
-        INSTALLED_VERSION=$(echo "$INSTALLED_VERSION" | head -n 1)
-        echo "Installed: $INSTALLED_VERSION"
-        echo "probitas-version=$INSTALLED_VERSION" >> $GITHUB_OUTPUT
+    - name: Install Probitas (macOS / Linux)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        PROBITAS_VERSION: ${{ steps.version.outputs.version }}
+        PROBITAS_INSTALL_DIR: ${{ runner.tool_cache }}/probitas/${{ steps.version.outputs.version }}
+      run: |
+        # Use the install script of the release being installed, not main.
+        curl -fsSL "https://raw.githubusercontent.com/probitas-test/probitas/v${PROBITAS_VERSION}/install.sh" | sh
+        echo "${PROBITAS_INSTALL_DIR}/bin" >> "$GITHUB_PATH"
+
+    - name: Install Probitas (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        PROBITAS_VERSION: ${{ steps.version.outputs.version }}
+        PROBITAS_INSTALL_DIR: ${{ runner.tool_cache }}/probitas/${{ steps.version.outputs.version }}
+      run: |
+        $ErrorActionPreference = "Stop"
+        $base = "https://github.com/probitas-test/probitas/releases/download/v$env:PROBITAS_VERSION"
+        $archive = "probitas-windows-x64.zip"
+        $tmp = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP "probitas-$([guid]::NewGuid())")
+        Invoke-WebRequest "$base/$archive" -OutFile (Join-Path $tmp $archive)
+        Invoke-WebRequest "$base/SHA256SUMS" -OutFile (Join-Path $tmp "SHA256SUMS")
+        $line = Get-Content (Join-Path $tmp "SHA256SUMS") | Where-Object { $_ -match " $([regex]::Escape($archive))$" }
+        if (-not $line) { throw "$archive is not listed in SHA256SUMS" }
+        $expected = ($line -split '\s+')[0]
+        $actual = (Get-FileHash (Join-Path $tmp $archive) -Algorithm SHA256).Hash.ToLower()
+        if ($expected -ne $actual) { throw "Checksum mismatch for $archive (expected $expected, got $actual)" }
+        $bin = Join-Path $env:PROBITAS_INSTALL_DIR "bin"
+        New-Item -ItemType Directory -Force -Path $bin | Out-Null
+        Expand-Archive (Join-Path $tmp $archive) -DestinationPath $bin -Force
+        Add-Content -Path $env:GITHUB_PATH -Value $bin
+
+    - name: Locate the DuckDB cache
+      id: duckdb
+      if: inputs.cache == 'true'
+      shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          macOS) dir="$HOME/Library/Caches/probitas/duckdb" ;;
+          Windows) dir="$LOCALAPPDATA/probitas/duckdb" ;;
+          *) dir="${XDG_CACHE_HOME:-$HOME/.cache}/probitas/duckdb" ;;
+        esac
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+    - name: Cache the DuckDB native binding
+      if: inputs.cache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.duckdb.outputs.dir }}
+        key: probitas-duckdb-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
 
     - name: Verify Probitas
       shell: bash
-      run: |
-        echo "Probitas CLI is ready:"
-        probitas --version
+      run: probitas --version

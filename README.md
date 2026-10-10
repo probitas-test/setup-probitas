@@ -39,18 +39,26 @@ jobs:
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `deno-version` | The Deno version to install. Can be a semver version or range (e.g., `v2.x`, `^2`), `canary`, `lts`, or `rc`. | `v2.x` |
-| `probitas-version` | The Probitas version to install from JSR. Can be a semver version or `latest`. | `latest` |
-| `cache` | Cache downloaded modules & packages automatically in GitHub Actions cache. | `true` |
-| `cache-hash` | A hash used as part of the cache key, which defaults to a hash of the `deno.lock` files. | |
+| `probitas-version` | The Probitas version to install (2.0.0 or later), or `latest`. | `latest` |
+| `cache` | Cache the DuckDB native binding that Probitas downloads on first use. | `true` |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `cache-hit` | A boolean indicating whether the cache was hit. |
-| `deno-version` | The Deno version that was installed. |
 | `probitas-version` | The Probitas version that was installed. |
+
+## Probitas 1.x
+
+Probitas 1.x ran on Deno and is installed by `setup-probitas@v1`, which keeps
+working unchanged. `@v2` installs Probitas 2 and later only, and fails with a
+clear message when asked for a 1.x version.
+
+```yaml
+- uses: probitas-test/setup-probitas@v1
+  with:
+    probitas-version: "1.0.0"
+```
 
 ## Examples
 
@@ -59,7 +67,7 @@ jobs:
 ```yaml
 - uses: probitas-test/setup-probitas@v2
   with:
-    probitas-version: "0.21.0"
+    probitas-version: "2.0.0"
 ```
 
 ### Matrix Testing
@@ -72,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        probitas-version: ["latest", "0.20.0", "0.21.0"]
+        probitas-version: ["latest", "2.0.0"]
     steps:
       - uses: actions/checkout@v4
 
@@ -114,9 +122,10 @@ jobs:
 
 This action performs the following steps:
 
-1. **Setup Deno**: Installs Deno (required runtime) via [denoland/setup-deno](https://github.com/denoland/setup-deno), with optional caching of `deno.lock` dependencies
-2. **Install Probitas CLI**: Runs the official `install.sh` from the Probitas repository, which uses `deno install` to install the CLI from [JSR](https://jsr.io/@probitas/probitas) at the requested version
-3. **Verify Installation**: Confirms Probitas is correctly installed and available in the PATH
+1. **Resolve the version**: `latest` becomes the newest Probitas GitHub Release
+2. **Install the binary**: Downloads the platform's archive from the Probitas GitHub Release and verifies it against the release's `SHA256SUMS` (on macOS and Linux through that release's `install.sh`), then adds it to the PATH. No runtime is needed.
+3. **Cache DuckDB**: Optionally caches the DuckDB native binding that Probitas downloads the first time a scenario uses DuckDB
+4. **Verify Installation**: Confirms Probitas is correctly installed and available in the PATH
 
 ## Versioning
 

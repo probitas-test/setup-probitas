@@ -1,4 +1,4 @@
-import { scenario } from "jsr:@probitas/probitas";
+import { scenario } from "@probitas-test/probitas";
 
 export default scenario("Example Scenario", { tags: ["example", "basic"] })
   .step("Step 1: Initialize", () => {
